@@ -1,33 +1,21 @@
 import React, { useState } from 'react';
 import './App.css';
-import CameraCapture from './components/CameraCapture';
 import ParkingDashboard from './components/ParkingDashboard';
 import ParkingRecords from './components/ParkingRecords';
-import CameraTest from './components/CameraTest';
-import SmartCameraCapture from './components/SmartCameraCapture';
-import UltraSimpleCamera from './components/UltraSimpleCamera';
 import BrowserInfo from './components/BrowserInfo';
 import CameraSwitcher from './components/CameraSwitcher';
 
-type TabType = 'camera' | 'dashboard' | 'records' | 'test' | 'smart' | 'ultra' | 'info' | 'switcher';
+type TabType = 'dashboard' | 'records' | 'info' | 'switcher';
 
 function App() {
-  const [activeTab, setActiveTab] = useState<TabType>('camera');
+  const [activeTab, setActiveTab] = useState<TabType>('switcher');
 
   const renderContent = () => {
     switch (activeTab) {
-      case 'camera':
-        return <CameraCapture />;
       case 'dashboard':
         return <ParkingDashboard />;
       case 'records':
         return <ParkingRecords />;
-      case 'test':
-        return <CameraTest />;
-      case 'smart':
-        return <SmartCameraCapture />;
-      case 'ultra':
-        return <UltraSimpleCamera />;
       case 'info':
         return <BrowserInfo />;
       case 'switcher':
@@ -46,25 +34,7 @@ function App() {
             className={`tab-btn ${activeTab === 'switcher' ? 'active' : ''}`}
             onClick={() => setActiveTab('switcher')}
           >
-            📷 カメラ選択
-          </button>
-          <button 
-            className={`tab-btn ${activeTab === 'ultra' ? 'active' : ''}`}
-            onClick={() => setActiveTab('ultra')}
-          >
-            🔬 デバッグ
-          </button>
-          <button 
-            className={`tab-btn ${activeTab === 'smart' ? 'active' : ''}`}
-            onClick={() => setActiveTab('smart')}
-          >
-            📱 スマートカメラ
-          </button>
-          <button 
-            className={`tab-btn ${activeTab === 'camera' ? 'active' : ''}`}
-            onClick={() => setActiveTab('camera')}
-          >
-            📷 標準カメラ
+            📷 撮影・記録
           </button>
           <button 
             className={`tab-btn ${activeTab === 'dashboard' ? 'active' : ''}`}
@@ -77,12 +47,6 @@ function App() {
             onClick={() => setActiveTab('records')}
           >
             📊 履歴・レポート
-          </button>
-          <button 
-            className={`tab-btn ${activeTab === 'test' ? 'active' : ''}`}
-            onClick={() => setActiveTab('test')}
-          >
-            🔧 カメラテスト
           </button>
           <button 
             className={`tab-btn ${activeTab === 'info' ? 'active' : ''}`}

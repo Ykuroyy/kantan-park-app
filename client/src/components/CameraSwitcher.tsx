@@ -460,7 +460,8 @@ const CameraSwitcher: React.FC = () => {
         border: '3px solid #dee2e6',
         borderRadius: '12px',
         overflow: 'hidden',
-        backgroundColor: '#000'
+        backgroundColor: '#000',
+        position: 'relative'
       }}>
         <video
           ref={videoRef}
