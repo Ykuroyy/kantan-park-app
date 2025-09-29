@@ -1,0 +1,341 @@
+/* ParkingRecords.css */
+.parking-records {
+  padding: 20px;
+  max-width: 1400px;
+  margin: 0 auto;
+}
+
+.records-header {
+  margin-bottom: 30px;
+}
+
+.records-header h2 {
+  margin: 0 0 20px 0;
+  color: #333;
+  font-size: 24px;
+}
+
+.controls-section {
+  background: white;
+  padding: 20px;
+  border-radius: 12px;
+  box-shadow: 0 2px 8px rgba(0,0,0,0.1);
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-end;
+  flex-wrap: wrap;
+  gap: 20px;
+}
+
+.filters {
+  display: flex;
+  gap: 20px;
+  flex-wrap: wrap;
+  align-items: flex-end;
+}
+
+.date-filter, .status-filter, .license-search {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.date-filter {
+  display: flex;
+  flex-direction: row;
+  gap: 15px;
+}
+
+.date-filter label {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  font-size: 14px;
+  font-weight: 600;
+  color: #555;
+}
+
+.status-filter label, .license-search label {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  font-size: 14px;
+  font-weight: 600;
+  color: #555;
+}
+
+.date-filter input, .status-filter select, .license-search input {
+  padding: 8px 12px;
+  border: 2px solid #e0e0e0;
+  border-radius: 6px;
+  font-size: 14px;
+  transition: border-color 0.2s ease;
+  min-width: 120px;
+}
+
+.date-filter input:focus, .status-filter select:focus, .license-search input:focus {
+  outline: none;
+  border-color: #3498db;
+  box-shadow: 0 0 0 3px rgba(52, 152, 219, 0.1);
+}
+
+.license-search input {
+  min-width: 200px;
+}
+
+.export-btn {
+  background: linear-gradient(135deg, #28a745, #20c997);
+  color: white;
+  border: none;
+  padding: 10px 20px;
+  border-radius: 6px;
+  font-size: 14px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: all 0.2s ease;
+  white-space: nowrap;
+}
+
+.export-btn:hover {
+  background: linear-gradient(135deg, #218838, #1ea080);
+  transform: translateY(-1px);
+  box-shadow: 0 4px 12px rgba(40, 167, 69, 0.3);
+}
+
+.records-summary {
+  margin-bottom: 20px;
+}
+
+.summary-card {
+  background: white;
+  padding: 20px;
+  border-radius: 12px;
+  box-shadow: 0 2px 8px rgba(0,0,0,0.1);
+}
+
+.summary-card h3 {
+  margin: 0 0 15px 0;
+  color: #333;
+  font-size: 18px;
+}
+
+.summary-stats {
+  display: flex;
+  gap: 30px;
+  flex-wrap: wrap;
+}
+
+.stat {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.stat-label {
+  font-size: 14px;
+  color: #666;
+  font-weight: 500;
+}
+
+.stat-value {
+  font-size: 24px;
+  font-weight: bold;
+  color: #3498db;
+}
+
+.records-table-container {
+  background: white;
+  border-radius: 12px;
+  box-shadow: 0 2px 8px rgba(0,0,0,0.1);
+  overflow: hidden;
+}
+
+.records-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 14px;
+}
+
+.records-table th {
+  background: #f8f9fa;
+  color: #333;
+  font-weight: 600;
+  padding: 15px 12px;
+  text-align: left;
+  border-bottom: 2px solid #e9ecef;
+  white-space: nowrap;
+}
+
+.records-table td {
+  padding: 12px;
+  border-bottom: 1px solid #e9ecef;
+  vertical-align: middle;
+}
+
+.records-table tr:hover {
+  background: #f8f9fa;
+}
+
+.license-plate-cell {
+  font-family: 'Courier New', monospace;
+  font-weight: bold;
+  color: #2c3e50;
+  background: #ecf0f1;
+  border-radius: 4px;
+  padding: 8px 12px !important;
+  text-align: center;
+  min-width: 120px;
+}
+
+.spot-number-cell {
+  text-align: center;
+  font-weight: 600;
+  color: #3498db;
+}
+
+.datetime-cell {
+  font-size: 13px;
+  color: #666;
+  min-width: 140px;
+}
+
+.duration-cell {
+  font-weight: 600;
+  color: #e67e22;
+  text-align: center;
+}
+
+.status-cell {
+  text-align: center;
+}
+
+.status-badge {
+  padding: 4px 8px;
+  border-radius: 12px;
+  font-size: 12px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+}
+
+.status-badge.parked {
+  background: #d4edda;
+  color: #155724;
+  border: 1px solid #c3e6cb;
+}
+
+.status-badge.departed {
+  background: #f8d7da;
+  color: #721c24;
+  border: 1px solid #f5c6cb;
+}
+
+.staff-cell, .notes-cell {
+  color: #666;
+  font-size: 13px;
+  max-width: 120px;
+  word-break: break-word;
+}
+
+.notes-cell {
+  max-width: 150px;
+}
+
+.no-records {
+  text-align: center;
+  padding: 60px 20px;
+  color: #666;
+}
+
+.no-records p {
+  margin: 0;
+  font-size: 16px;
+}
+
+.records-loading {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  padding: 60px 20px;
+  color: #666;
+}
+
+.loading-spinner {
+  width: 40px;
+  height: 40px;
+  border: 4px solid #f3f3f3;
+  border-top: 4px solid #3498db;
+  border-radius: 50%;
+  animation: spin 1s linear infinite;
+  margin-bottom: 15px;
+}
+
+@keyframes spin {
+  0% { transform: rotate(0deg); }
+  100% { transform: rotate(360deg); }
+}
+
+/* レスポンシブ対応 */
+@media (max-width: 1200px) {
+  .records-table-container {
+    overflow-x: auto;
+  }
+  
+  .records-table {
+    min-width: 1000px;
+  }
+}
+
+@media (max-width: 768px) {
+  .controls-section {
+    flex-direction: column;
+    align-items: stretch;
+  }
+  
+  .filters {
+    flex-direction: column;
+    gap: 15px;
+  }
+  
+  .date-filter {
+    flex-direction: column;
+    gap: 10px;
+  }
+  
+  .summary-stats {
+    flex-direction: column;
+    gap: 15px;
+  }
+  
+  .records-table th, .records-table td {
+    padding: 8px 6px;
+    font-size: 12px;
+  }
+  
+  .license-plate-cell {
+    min-width: 100px;
+  }
+  
+  .datetime-cell {
+    min-width: 120px;
+  }
+}
+
+@media (max-width: 480px) {
+  .parking-records {
+    padding: 10px;
+  }
+  
+  .controls-section, .summary-card, .records-table-container {
+    padding: 15px;
+  }
+  
+  .records-table {
+    font-size: 11px;
+  }
+  
+  .records-table th, .records-table td {
+    padding: 6px 4px;
+  }
+}
