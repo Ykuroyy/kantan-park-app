@@ -45,6 +45,17 @@ const CameraCapture: React.FC<CameraProps> = ({ onCapture }) => {
       }
 
       console.log('カメラアクセスを試行中...');
+      console.log('利用可能なメディアデバイス:', navigator.mediaDevices);
+      
+      // 利用可能なカメラを確認
+      try {
+        const devices = await navigator.mediaDevices.enumerateDevices();
+        const videoDevices = devices.filter(device => device.kind === 'videoinput');
+        console.log('利用可能なカメラ数:', videoDevices.length);
+        console.log('カメラデバイス:', videoDevices);
+      } catch (e) {
+        console.log('デバイス確認エラー:', e);
+      }
       
       // まず基本的な設定で試行
       let stream;

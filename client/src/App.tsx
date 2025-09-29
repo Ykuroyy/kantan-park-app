@@ -3,8 +3,10 @@ import './App.css';
 import CameraCapture from './components/CameraCapture';
 import ParkingDashboard from './components/ParkingDashboard';
 import ParkingRecords from './components/ParkingRecords';
+import CameraTest from './components/CameraTest';
+import SmartCameraCapture from './components/SmartCameraCapture';
 
-type TabType = 'camera' | 'dashboard' | 'records';
+type TabType = 'camera' | 'dashboard' | 'records' | 'test' | 'smart';
 
 function App() {
   const [activeTab, setActiveTab] = useState<TabType>('camera');
@@ -17,8 +19,12 @@ function App() {
         return <ParkingDashboard />;
       case 'records':
         return <ParkingRecords />;
+      case 'test':
+        return <CameraTest />;
+      case 'smart':
+        return <SmartCameraCapture />;
       default:
-        return <CameraCapture />;
+        return <SmartCameraCapture />;
     }
   };
 
@@ -28,10 +34,16 @@ function App() {
         <h1>🚗 駐車場管理システム</h1>
         <div className="tab-navigation">
           <button 
+            className={`tab-btn ${activeTab === 'smart' ? 'active' : ''}`}
+            onClick={() => setActiveTab('smart')}
+          >
+            📱 スマートカメラ
+          </button>
+          <button 
             className={`tab-btn ${activeTab === 'camera' ? 'active' : ''}`}
             onClick={() => setActiveTab('camera')}
           >
-            📷 カメラ撮影
+            📷 標準カメラ
           </button>
           <button 
             className={`tab-btn ${activeTab === 'dashboard' ? 'active' : ''}`}
@@ -44,6 +56,12 @@ function App() {
             onClick={() => setActiveTab('records')}
           >
             📊 履歴・レポート
+          </button>
+          <button 
+            className={`tab-btn ${activeTab === 'test' ? 'active' : ''}`}
+            onClick={() => setActiveTab('test')}
+          >
+            🔧 カメラテスト
           </button>
         </div>
       </header>
