@@ -7,8 +7,9 @@ import CameraTest from './components/CameraTest';
 import SmartCameraCapture from './components/SmartCameraCapture';
 import UltraSimpleCamera from './components/UltraSimpleCamera';
 import BrowserInfo from './components/BrowserInfo';
+import CameraSwitcher from './components/CameraSwitcher';
 
-type TabType = 'camera' | 'dashboard' | 'records' | 'test' | 'smart' | 'ultra' | 'info';
+type TabType = 'camera' | 'dashboard' | 'records' | 'test' | 'smart' | 'ultra' | 'info' | 'switcher';
 
 function App() {
   const [activeTab, setActiveTab] = useState<TabType>('camera');
@@ -29,8 +30,10 @@ function App() {
         return <UltraSimpleCamera />;
       case 'info':
         return <BrowserInfo />;
+      case 'switcher':
+        return <CameraSwitcher />;
       default:
-        return <UltraSimpleCamera />;
+        return <CameraSwitcher />;
     }
   };
 
@@ -40,10 +43,16 @@ function App() {
         <h1>🚗 駐車場管理システム</h1>
         <div className="tab-navigation">
           <button 
+            className={`tab-btn ${activeTab === 'switcher' ? 'active' : ''}`}
+            onClick={() => setActiveTab('switcher')}
+          >
+            📷 カメラ選択
+          </button>
+          <button 
             className={`tab-btn ${activeTab === 'ultra' ? 'active' : ''}`}
             onClick={() => setActiveTab('ultra')}
           >
-            🔬 デバッグカメラ
+            🔬 デバッグ
           </button>
           <button 
             className={`tab-btn ${activeTab === 'smart' ? 'active' : ''}`}
