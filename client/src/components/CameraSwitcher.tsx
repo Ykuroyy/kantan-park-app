@@ -1,9 +1,18 @@
 import React, { useState, useRef, useEffect } from 'react';
+import { createWorker } from 'tesseract.js';
 
 interface CameraDevice {
   deviceId: string;
   label: string;
   groupId: string;
+}
+
+interface CapturedPhoto {
+  id: string;
+  timestamp: string;
+  imageData: string;
+  ocrText?: string;
+  cameraLabel: string;
 }
 
 const CameraSwitcher: React.FC = () => {
@@ -12,8 +21,12 @@ const CameraSwitcher: React.FC = () => {
   const [isStreaming, setIsStreaming] = useState(false);
   const [logs, setLogs] = useState<string[]>([]);
   const [currentStream, setCurrentStream] = useState<MediaStream | null>(null);
+  const [capturedPhotos, setCapturedPhotos] = useState<CapturedPhoto[]>([]);
+  const [isProcessing, setIsProcessing] = useState(false);
+  const [ocrWorker, setOcrWorker] = useState<any>(null);
   
   const videoRef = useRef<HTMLVideoElement>(null);
+  const canvasRef = useRef<HTMLCanvasElement>(null);
 
   const addLog = (message: string) => {
     const timestamp = new Date().toLocaleTimeString();
@@ -159,9 +172,130 @@ const CameraSwitcher: React.FC = () => {
     addLog('カメラ停止');
   };
 
+  // OCRワーカー初期化
+  const initOCRWorker = async () => {
+    try {
+      addLog('🔤 OCRワーカーを初期化中...');
+      const worker = await createWorker('jpn');
+      setOcrWorker(worker);
+      addLog('✅ OCRワーカー初期化完了');
+    } catch (error) {
+      addLog(`❌ OCRワーカー初期化エラー: ${error}`);
+    }
+  };
+
+  // 写真撮影
+  const capturePhoto = async () => {
+    if (!videoRef.current || !canvasRef.current || !isStreaming) {
+      addLog('❌ カメラが起動していません');
+      return;
+    }
+
+    try {
+      setIsProcessing(true);
+      addLog('📸 写真撮影開始');
+
+      const video = videoRef.current;
+      const canvas = canvasRef.current;
+      const context = canvas.getContext('2d');
+
+      if (!context) {
+        addLog('❌ Canvas contextが取得できません');
+        return;
+      }
+
+      // ビデオの実際のサイズを取得
+      const videoWidth = video.videoWidth;
+      const videoHeight = video.videoHeight;
+
+      // キャンバスサイズを設定
+      canvas.width = videoWidth;
+      canvas.height = videoHeight;
+
+      // ビデオフレームをキャンバスに描画
+      context.drawImage(video, 0, 0, videoWidth, videoHeight);
+
+      // 画像データを取得
+      const imageData = canvas.toDataURL('image/jpeg', 0.9);
+
+      const currentDevice = devices.find(d => d.deviceId === selectedDeviceId);
+      const photo: CapturedPhoto = {
+        id: Date.now().toString(),
+        timestamp: new Date().toLocaleString(),
+        imageData,
+        cameraLabel: currentDevice?.label || '不明'
+      };
+
+      addLog(`✅ 写真撮影完了 (${videoWidth}x${videoHeight})`);
+
+      // OCR処理
+      if (ocrWorker) {
+        addLog('🔤 OCR処理開始...');
+        try {
+          const { data: { text } } = await ocrWorker.recognize(imageData);
+          const cleanedText = text.replace(/\s+/g, ' ').trim();
+          photo.ocrText = cleanedText;
+          addLog(`✅ OCR完了: ${cleanedText.substring(0, 50)}${cleanedText.length > 50 ? '...' : ''}`);
+        } catch (ocrError) {
+          addLog(`❌ OCR処理エラー: ${ocrError}`);
+        }
+      } else {
+        addLog('⚠️ OCRワーカーが初期化されていません');
+      }
+
+      // 写真を保存
+      setCapturedPhotos(prev => [photo, ...prev]);
+      addLog(`📷 写真を保存しました (ID: ${photo.id})`);
+
+    } catch (error) {
+      addLog(`❌ 写真撮影エラー: ${error}`);
+    } finally {
+      setIsProcessing(false);
+    }
+  };
+
+  // 写真削除
+  const deletePhoto = (photoId: string) => {
+    setCapturedPhotos(prev => prev.filter(p => p.id !== photoId));
+    addLog(`🗑️ 写真を削除しました (ID: ${photoId})`);
+  };
+
+  // 駐車記録として保存
+  const saveParkingRecord = async (photo: CapturedPhoto, spotNumber: number) => {
+    try {
+      addLog(`💾 駐車記録保存開始 (スポット: ${spotNumber})`);
+
+      // Base64からBlobに変換
+      const response = await fetch(photo.imageData);
+      const blob = await response.blob();
+      
+      const formData = new FormData();
+      formData.append('image', blob, `parking_${photo.id}.jpg`);
+      formData.append('spotNumber', spotNumber.toString());
+      formData.append('licensePlate', photo.ocrText || '');
+      formData.append('timestamp', photo.timestamp);
+      formData.append('cameraInfo', photo.cameraLabel);
+
+      const saveResponse = await fetch('/api/parking-records', {
+        method: 'POST',
+        body: formData
+      });
+
+      if (saveResponse.ok) {
+        addLog(`✅ 駐車記録保存完了 (スポット: ${spotNumber})`);
+      } else {
+        addLog(`❌ 駐車記録保存エラー: ${saveResponse.statusText}`);
+      }
+
+    } catch (error) {
+      addLog(`❌ 駐車記録保存エラー: ${error}`);
+    }
+  };
+
   // 初期化
   useEffect(() => {
     getDevices();
+    initOCRWorker();
   }, []);
 
   // カメラ推奨度を計算（背面カメラを優先）
@@ -321,7 +455,142 @@ const CameraSwitcher: React.FC = () => {
             📷 カメラを選択して起動してください
           </div>
         )}
+        
+        {/* シャッターボタン */}
+        {isStreaming && (
+          <div style={{
+            position: 'absolute',
+            bottom: '20px',
+            left: '50%',
+            transform: 'translateX(-50%)',
+            display: 'flex',
+            gap: '15px',
+            alignItems: 'center'
+          }}>
+            <button
+              onClick={capturePhoto}
+              disabled={isProcessing}
+              style={{
+                width: '80px',
+                height: '80px',
+                borderRadius: '50%',
+                border: '4px solid white',
+                backgroundColor: isProcessing ? '#6c757d' : '#ff4757',
+                color: 'white',
+                fontSize: '24px',
+                cursor: isProcessing ? 'not-allowed' : 'pointer',
+                boxShadow: '0 4px 8px rgba(0,0,0,0.3)',
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'center'
+              }}
+            >
+              {isProcessing ? '⏳' : '📸'}
+            </button>
+            {isProcessing && (
+              <div style={{
+                backgroundColor: 'rgba(0,0,0,0.7)',
+                color: 'white',
+                padding: '5px 10px',
+                borderRadius: '15px',
+                fontSize: '12px'
+              }}>
+                処理中...
+              </div>
+            )}
+          </div>
+        )}
       </div>
+
+      {/* 隠しキャンバス（写真撮影用） */}
+      <canvas
+        ref={canvasRef}
+        style={{ display: 'none' }}
+      />
+
+      {/* 撮影済み写真一覧 */}
+      {capturedPhotos.length > 0 && (
+        <div style={{ marginBottom: '20px' }}>
+          <h4>📷 撮影済み写真 ({capturedPhotos.length}枚)</h4>
+          <div style={{
+            display: 'grid',
+            gridTemplateColumns: 'repeat(auto-fill, minmax(200px, 1fr))',
+            gap: '15px',
+            maxHeight: '400px',
+            overflowY: 'auto',
+            padding: '10px',
+            border: '1px solid #dee2e6',
+            borderRadius: '8px',
+            backgroundColor: '#f8f9fa'
+          }}>
+            {capturedPhotos.map((photo) => (
+              <div
+                key={photo.id}
+                style={{
+                  border: '1px solid #dee2e6',
+                  borderRadius: '8px',
+                  padding: '10px',
+                  backgroundColor: 'white'
+                }}
+              >
+                <img
+                  src={photo.imageData}
+                  alt={`撮影 ${photo.timestamp}`}
+                  style={{
+                    width: '100%',
+                    height: 'auto',
+                    borderRadius: '4px',
+                    marginBottom: '8px'
+                  }}
+                />
+                <div style={{ fontSize: '12px', color: '#666' }}>
+                  <div><strong>撮影時刻:</strong> {photo.timestamp}</div>
+                  <div><strong>カメラ:</strong> {photo.cameraLabel}</div>
+                  {photo.ocrText && (
+                    <div><strong>OCR結果:</strong> {photo.ocrText.substring(0, 30)}...</div>
+                  )}
+                </div>
+                <div style={{ marginTop: '10px', display: 'flex', gap: '5px' }}>
+                  <select
+                    onChange={(e) => {
+                      const spotNumber = parseInt(e.target.value);
+                      if (spotNumber) {
+                        saveParkingRecord(photo, spotNumber);
+                      }
+                    }}
+                    style={{
+                      flex: 1,
+                      padding: '4px',
+                      fontSize: '12px',
+                      borderRadius: '4px',
+                      border: '1px solid #dee2e6'
+                    }}
+                  >
+                    <option value="">駐車場所選択</option>
+                    {Array.from({length: 100}, (_, i) => i + 1).map(num => (
+                      <option key={num} value={num}>スポット {num}</option>
+                    ))}
+                  </select>
+                  <button
+                    onClick={() => deletePhoto(photo.id)}
+                    style={{
+                      padding: '4px 8px',
+                      backgroundColor: '#dc3545',
+                      color: 'white',
+                      border: 'none',
+                      borderRadius: '4px',
+                      cursor: 'pointer',
+                      fontSize: '12px'
+                    }}
+                  >
+                    🗑️
+                  </button>
+                </div>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
 
       {/* クイック切り替えボタン */}
       {devices.length > 0 && (
