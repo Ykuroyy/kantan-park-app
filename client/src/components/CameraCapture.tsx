@@ -32,22 +32,82 @@ const CameraCapture: React.FC<CameraProps> = ({ onCapture }) => {
   // カメラストリーミング開始
   const startCamera = useCallback(async () => {
     try {
-      const stream = await navigator.mediaDevices.getUserMedia({ 
-        video: { 
-          facingMode: 'environment', // バックカメラを優先
-          width: { ideal: 1920 },
-          height: { ideal: 1080 }
-        } 
-      });
+      // ブラウザ対応チェック
+      if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) {
+        alert('このブラウザはカメラ機能をサポートしていません。ファイルアップロード機能をご利用ください。');
+        return;
+      }
+
+      // HTTPS必須チェック
+      if (window.location.protocol !== 'https:' && window.location.hostname !== 'localhost') {
+        alert('カメラ機能はHTTPS環境でのみ利用できます。ファイルアップロード機能をご利用ください。');
+        return;
+      }
+
+      console.log('カメラアクセスを試行中...');
       
-      if (videoRef.current) {
+      // まず基本的な設定で試行
+      let stream;
+      try {
+        stream = await navigator.mediaDevices.getUserMedia({ 
+          video: { 
+            facingMode: 'environment', // バックカメラを優先
+            width: { ideal: 1280, max: 1920 },
+            height: { ideal: 720, max: 1080 }
+          } 
+        });
+      } catch (envError) {
+        console.log('バックカメラでの起動失敗、フロントカメラで試行:', envError);
+        // バックカメラ失敗時はフロントカメラで試行
+        try {
+          stream = await navigator.mediaDevices.getUserMedia({ 
+            video: { 
+              facingMode: 'user',
+              width: { ideal: 1280, max: 1920 },
+              height: { ideal: 720, max: 1080 }
+            } 
+          });
+        } catch (userError) {
+          console.log('フロントカメラでの起動失敗、基本設定で試行:', userError);
+          // 基本設定で試行
+          stream = await navigator.mediaDevices.getUserMedia({ 
+            video: true 
+          });
+        }
+      }
+      
+      if (videoRef.current && stream) {
         videoRef.current.srcObject = stream;
         streamRef.current = stream;
-        setIsStreaming(true);
+        
+        // ビデオが再生可能になったら再生開始
+        videoRef.current.onloadedmetadata = () => {
+          if (videoRef.current) {
+            videoRef.current.play().then(() => {
+              console.log('カメラ起動成功');
+              setIsStreaming(true);
+            }).catch(playError => {
+              console.error('ビデオ再生エラー:', playError);
+              alert('カメラの再生に失敗しました。ページを更新して再試行してください。');
+            });
+          }
+        };
       }
-    } catch (error) {
+    } catch (error: any) {
       console.error('カメラアクセスエラー:', error);
-      alert('カメラにアクセスできませんでした。ファイルアップロード機能をご利用ください。');
+      let errorMessage = 'カメラにアクセスできませんでした。';
+      
+      if (error.name === 'NotAllowedError') {
+        errorMessage = 'カメラアクセスが拒否されました。ブラウザの設定でカメラアクセスを許可してください。';
+      } else if (error.name === 'NotFoundError') {
+        errorMessage = 'カメラが見つかりません。デバイスにカメラが接続されているか確認してください。';
+      } else if (error.name === 'NotSupportedError') {
+        errorMessage = 'このブラウザはカメラ機能をサポートしていません。';
+      } else if (error.name === 'NotReadableError') {
+        errorMessage = 'カメラが他のアプリで使用中の可能性があります。他のカメラアプリを閉じて再試行してください。';
+      }
+      
+      alert(errorMessage + ' ファイルアップロード機能をご利用ください。');
     }
   }, []);
 
@@ -107,96 +167,83 @@ const CameraCapture: React.FC<CameraProps> = ({ onCapture }) => {
       processImage(dataUrl, imageId);
     };
     reader.readAsDataURL(file);
+    
+    // ファイル選択後にinputをクリア（同じファイルを再選択可能にする）
+    event.target.value = '';
   }, []);
 
   // OCR処理
   const processImage = useCallback(async (dataUrl: string, imageId: string) => {
     try {
-      // 画像の前処理（明度とコントラスト調整）
-      const preprocessedImage = await preprocessImage(dataUrl);
-      
-      const result = await Tesseract.recognize(
-        preprocessedImage,
-        'eng',
+      const { data: { text } } = await Tesseract.recognize(
+        dataUrl,
+        'jpn+eng',
         {
           logger: m => console.log(m)
         }
       );
 
-      let licensePlate = result.data.text.trim();
-      
-      // ナンバープレートのフォーマット調整
-      licensePlate = formatLicensePlate(licensePlate);
+      // ナンバープレートの形式を検出・整形
+      const licensePlate = extractLicensePlate(text);
 
-      setCapturedImages(prev => prev.map(img => 
-        img.id === imageId 
-          ? { ...img, licensePlate, isProcessing: false }
-          : img
-      ));
+      setCapturedImages(prev => 
+        prev.map(img => 
+          img.id === imageId 
+            ? { ...img, licensePlate, isProcessing: false }
+            : img
+        )
+      );
 
-      if (onCapture) {
+      if (licensePlate && onCapture) {
         onCapture(licensePlate);
       }
-
     } catch (error) {
       console.error('OCR処理エラー:', error);
-      setCapturedImages(prev => prev.map(img => 
-        img.id === imageId 
-          ? { ...img, isProcessing: false, error: 'ナンバープレートを認識できませんでした' }
-          : img
-      ));
+      setCapturedImages(prev => 
+        prev.map(img => 
+          img.id === imageId 
+            ? { ...img, error: 'OCR処理に失敗しました', isProcessing: false }
+            : img
+        )
+      );
     }
   }, [onCapture]);
 
-  // 画像の前処理
-  const preprocessImage = async (dataUrl: string): Promise<string> => {
-    return new Promise((resolve) => {
-      const img = new Image();
-      img.onload = () => {
-        const canvas = document.createElement('canvas');
-        const ctx = canvas.getContext('2d')!;
-        
-        canvas.width = img.width;
-        canvas.height = img.height;
-        
-        // 明度とコントラストを調整
-        ctx.filter = 'contrast(150%) brightness(110%) grayscale(100%)';
-        ctx.drawImage(img, 0, 0);
-        
-        resolve(canvas.toDataURL('image/jpeg', 0.9));
-      };
-      img.src = dataUrl;
-    });
-  };
-
-  // ナンバープレートフォーマット調整
-  const formatLicensePlate = (text: string): string => {
-    // 特殊文字と空白を除去
-    let formatted = text.replace(/[^A-Z0-9]/g, '');
+  // ナンバープレート抽出・整形
+  const extractLicensePlate = (text: string): string => {
+    // 改行と空白を除去
+    const cleanText = text.replace(/\s+/g, '');
     
-    // 日本のナンバープレートの一般的なパターンに調整
-    if (formatted.length >= 4) {
-      // 例: ABC1234 -> ABC-1234
-      if (formatted.length === 7) {
-        formatted = formatted.slice(0, 3) + '-' + formatted.slice(3);
-      }
-      // 例: AB1234 -> AB-1234
-      else if (formatted.length === 6) {
-        formatted = formatted.slice(0, 2) + '-' + formatted.slice(2);
+    // 日本のナンバープレートパターンを検索
+    const patterns = [
+      /[ぁ-んァ-ヶ一-龯]+\d{1,3}[ぁ-んァ-ヶ一-龯]+\d{1,4}/,
+      /[A-Z]+\d{1,3}[A-Z]+\d{1,4}/,
+      /\d{1,3}[ぁ-んァ-ヶ一-龯]+\d{1,4}/,
+      /\d{1,3}[A-Z]+\d{1,4}/
+    ];
+    
+    for (const pattern of patterns) {
+      const match = cleanText.match(pattern);
+      if (match) {
+        return match[0];
       }
     }
     
-    return formatted;
+    return cleanText.length > 0 ? cleanText : 'ナンバー読み取りできませんでした';
   };
 
   // 駐車記録の送信
   const submitParkingRecord = async (licensePlate: string) => {
-    if (!licensePlate || !selectedSpot) {
-      setMessage({ type: 'error', text: 'ナンバープレートと駐車位置を選択してください' });
+    if (!licensePlate || selectedSpot < 1 || selectedSpot > 100) {
+      setMessage({ 
+        type: 'error', 
+        text: 'ナンバープレートと駐車位置（1-100）を正しく入力してください' 
+      });
       return;
     }
 
     setIsSubmitting(true);
+    
     try {
       const formData = new FormData();
       formData.append('license_plate', licensePlate);
@@ -204,7 +251,7 @@ const CameraCapture: React.FC<CameraProps> = ({ onCapture }) => {
       formData.append('staff_id', staffId);
       formData.append('notes', notes);
 
-      // 対応する画像があれば添付
+      // 画像も送信する場合
       const imageData = capturedImages.find(img => img.licensePlate === licensePlate);
       if (imageData) {
         const response = await fetch(imageData.dataUrl);
@@ -246,208 +293,207 @@ const CameraCapture: React.FC<CameraProps> = ({ onCapture }) => {
 
   return (
     <div className="camera-capture">
-      <div className="card">
-        <div className="card-header">
-          📷 ナンバープレート撮影・読み取り
-        </div>
-        <div className="card-content">
-          {message && (
-            <div className={`alert alert-${message.type}`}>
-              {message.text}
-            </div>
-          )}
-
-          {/* カメラコントロール */}
-          <div className="camera-controls mb-3">
-            {!isStreaming ? (
-              <div className="text-center">
-                <button 
-                  className="btn btn-primary" 
-                  onClick={startCamera}
-                >
-                  📱 カメラを起動
-                </button>
-                <div className="mt-2">
-                  <span>または </span>
-                  <input
-                    ref={fileInputRef}
-                    type="file"
-                    accept="image/*"
-                    onChange={handleFileUpload}
-                    className="hidden"
-                  />
-                  <button
-                    className="btn btn-secondary"
-                    onClick={() => fileInputRef.current?.click()}
-                  >
-                    📁 ファイルから選択
-                  </button>
-                </div>
-              </div>
-            ) : (
-              <div className="text-center">
-                <button 
-                  className="btn btn-success" 
-                  onClick={capturePhoto}
-                >
-                  📸 撮影
-                </button>
-                <button 
-                  className="btn btn-danger ml-2" 
-                  onClick={stopCamera}
-                >
-                  ⏹️ 停止
-                </button>
-              </div>
-            )}
+      <div className="capture-header">
+        <h2>📷 ナンバープレート撮影・読み取り</h2>
+      </div>
+      
+      <div className="camera-section">
+        {message && (
+          <div className={`message ${message.type}`}>
+            {message.text}
           </div>
+        )}
 
-          {/* カメラビュー */}
-          {isStreaming && (
-            <div className="camera-view mb-3">
-              <video 
-                ref={videoRef} 
-                autoPlay 
-                playsInline
-                muted
-                style={{
-                  width: '100%',
-                  maxHeight: '400px',
-                  borderRadius: '8px',
-                  backgroundColor: '#000'
-                }}
-              />
+        {/* カメラコントロール */}
+        <div className="camera-controls">
+          {!isStreaming ? (
+            <>
+              <button 
+                className="camera-btn" 
+                onClick={startCamera}
+              >
+                📱 カメラを起動
+              </button>
+              
+              <div className="file-input-section">
+                <p className="file-input-label">または</p>
+                <input
+                  ref={fileInputRef}
+                  type="file"
+                  accept="image/*"
+                  capture="environment"
+                  onChange={handleFileUpload}
+                  className="file-input"
+                />
+                <button
+                  className="file-upload-btn"
+                  onClick={() => fileInputRef.current?.click()}
+                >
+                  📁 ファイルから選択
+                </button>
+              </div>
+            </>
+          ) : (
+            <>
+              <button 
+                className="camera-btn capture" 
+                onClick={capturePhoto}
+              >
+                📸 撮影
+              </button>
+              <button 
+                className="camera-btn danger" 
+                onClick={stopCamera}
+              >
+                ⏹️ 停止
+              </button>
+            </>
+          )}
+        </div>
+
+        {/* カメラビュー */}
+        <div className="camera-container">
+          {isStreaming ? (
+            <video 
+              ref={videoRef} 
+              autoPlay 
+              playsInline
+              muted
+              className="camera-video"
+            />
+          ) : (
+            <div className="camera-placeholder">
+              <p>📷 カメラを起動してナンバープレートを撮影</p>
+              <p>🔒 カメラアクセス許可が必要です</p>
             </div>
           )}
-          
-          <canvas ref={canvasRef} className="hidden" />
         </div>
+        
+        <canvas ref={canvasRef} style={{ display: 'none' }} />
       </div>
 
       {/* 撮影した画像とOCR結果 */}
       {capturedImages.length > 0 && (
-        <div className="card">
-          <div className="card-header">
-            🔍 読み取り結果
-          </div>
-          <div className="card-content">
-            <div className="grid grid-2">
-              {capturedImages.map((image) => (
-                <div key={image.id} className="image-result">
-                  <img 
-                    src={image.dataUrl} 
-                    alt="撮影画像"
-                    style={{
-                      width: '100%',
-                      height: '200px',
-                      objectFit: 'cover',
-                      borderRadius: '8px',
-                      marginBottom: '0.5rem'
-                    }}
-                  />
-                  
-                  {image.isProcessing && (
-                    <div className="text-center">
-                      <div className="spinner"></div>
-                      読み取り中...
+        <div className="captured-images">
+          <h3>🔍 読み取り結果</h3>
+          <div className="images-grid">
+            {capturedImages.map((image) => (
+              <div key={image.id} className="image-item">
+                <img 
+                  src={image.dataUrl} 
+                  alt="撮影画像"
+                  className="image-preview"
+                />
+                
+                {image.isProcessing && (
+                  <div className="processing-indicator">
+                    <div className="processing-spinner"></div>
+                    <span>読み取り中...</span>
+                  </div>
+                )}
+                
+                {image.licensePlate && (
+                  <div className="image-info">
+                    <div className="license-plate-result">
+                      📋 {image.licensePlate}
                     </div>
-                  )}
-                  
-                  {image.licensePlate && (
-                    <div>
-                      <div className="alert alert-success">
-                        <strong>📋 ナンバープレート:</strong><br/>
-                        <span style={{ fontSize: '1.2em', fontFamily: 'monospace' }}>
-                          {image.licensePlate}
-                        </span>
-                      </div>
-                      
-                      <div className="form-group">
-                        <label className="form-label">駐車位置 (1-100)</label>
-                        <input 
-                          type="number" 
-                          min="1" 
-                          max="100" 
-                          value={selectedSpot}
-                          onChange={(e) => setSelectedSpot(Number(e.target.value))}
-                          className="form-control"
-                        />
-                      </div>
-                      
-                      <div className="form-group">
-                        <label className="form-label">スタッフID</label>
-                        <input 
-                          type="text" 
-                          value={staffId}
-                          onChange={(e) => setStaffId(e.target.value)}
-                          className="form-control"
-                          placeholder="例: STAFF001"
-                        />
-                      </div>
-                      
-                      <div className="form-group">
-                        <label className="form-label">メモ（任意）</label>
-                        <textarea 
-                          value={notes}
-                          onChange={(e) => setNotes(e.target.value)}
-                          className="form-control"
-                          rows={2}
-                          placeholder="特記事項があれば入力してください"
-                        />
-                      </div>
-                      
-                      <button
-                        className="btn btn-success w-full"
-                        onClick={() => submitParkingRecord(image.licensePlate!)}
-                        disabled={isSubmitting}
-                      >
-                        {isSubmitting ? (
-                          <>
-                            <div className="spinner"></div>
-                            登録中...
-                          </>
-                        ) : (
-                          '✅ 駐車記録を登録'
-                        )}
-                      </button>
-                    </div>
-                  )}
-                  
-                  {image.error && (
-                    <div className="alert alert-danger">
-                      <strong>❌ エラー:</strong><br/>
-                      {image.error}
-                      <div className="mt-2">
-                        <button
-                          className="btn btn-primary"
-                          onClick={() => processImage(image.dataUrl, image.id)}
-                        >
-                          🔄 再読み取り
-                        </button>
-                      </div>
-                    </div>
-                  )}
-                </div>
-              ))}
-            </div>
+                  </div>
+                )}
+                
+                {image.error && (
+                  <div className="license-plate-result error">
+                    ❌ {image.error}
+                    <button
+                      className="camera-btn"
+                      onClick={() => processImage(image.dataUrl, image.id)}
+                      style={{ marginTop: '10px', padding: '5px 10px', fontSize: '12px' }}
+                    >
+                      🔄 再読み取り
+                    </button>
+                  </div>
+                )}
+              </div>
+            ))}
           </div>
         </div>
       )}
 
-      <div className="card">
-        <div className="card-header">
-          💡 使い方のヒント
+      {/* 駐車記録登録フォーム */}
+      {capturedImages.some(img => img.licensePlate) && (
+        <div className="form-section">
+          <h3>🚗 駐車記録登録</h3>
+          
+          <div className="form-grid">
+            <div className="form-group">
+              <label>駐車位置 (1-100)</label>
+              <input 
+                type="number" 
+                min="1" 
+                max="100" 
+                value={selectedSpot}
+                onChange={(e) => setSelectedSpot(Number(e.target.value))}
+              />
+            </div>
+            
+            <div className="form-group">
+              <label>スタッフID</label>
+              <input 
+                type="text" 
+                value={staffId}
+                onChange={(e) => setStaffId(e.target.value)}
+                placeholder="例: STAFF001"
+              />
+            </div>
+          </div>
+          
+          <div className="form-group notes-group">
+            <label>メモ（任意）</label>
+            <textarea 
+              value={notes}
+              onChange={(e) => setNotes(e.target.value)}
+              placeholder="特記事項があれば入力してください"
+            />
+          </div>
+          
+          <div className="submit-section">
+            <button
+              className="submit-btn"
+              onClick={() => {
+                const licensePlate = capturedImages.find(img => img.licensePlate)?.licensePlate;
+                if (licensePlate) submitParkingRecord(licensePlate);
+              }}
+              disabled={isSubmitting || !capturedImages.some(img => img.licensePlate)}
+            >
+              {isSubmitting ? (
+                <>
+                  <div className="processing-spinner"></div>
+                  登録中...
+                </>
+              ) : (
+                '✅ 駐車記録を登録'
+              )}
+            </button>
+            
+            <button
+              className="clear-btn"
+              onClick={() => setCapturedImages([])}
+            >
+              🗑️ クリア
+            </button>
+          </div>
         </div>
-        <div className="card-content">
-          <ul style={{ paddingLeft: '1.5rem', lineHeight: '1.6' }}>
-            <li>📱 カメラを起動してナンバープレートを撮影</li>
-            <li>📁 または、ファイルから画像を選択</li>
-            <li>🔍 OCRが自動でナンバープレートを読み取ります</li>
-            <li>✏️ 必要に応じて手動で修正可能</li>
-            <li>🏁 駐車位置を選択して登録完了</li>
-            <li>📸 連続撮影で複数台の車両を効率的に登録</li>
-          </ul>
-        </div>
+      )}
+
+      <div className="form-section">
+        <h3>💡 使い方のヒント</h3>
+        <ul style={{ paddingLeft: '1.5rem', lineHeight: '1.8', color: '#666' }}>
+          <li>📱 カメラを起動してナンバープレートを撮影</li>
+          <li>📁 または、ファイルから画像を選択</li>
+          <li>🔍 OCRが自動でナンバープレートを読み取ります</li>
+          <li>✏️ 必要に応じて手動で修正可能</li>
+          <li>🏁 駐車位置を選択して登録完了</li>
+          <li>📸 連続撮影で複数台の車両を効率的に登録</li>
+        </ul>
       </div>
     </div>
   );
