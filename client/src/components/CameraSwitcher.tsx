@@ -388,8 +388,12 @@ const CameraSwitcher: React.FC = () => {
       }
 
       // 写真を保存
-      setCapturedPhotos(prev => [photo, ...prev]);
-      addLog(`📷 写真を保存しました (ID: ${photo.id})`);
+      setCapturedPhotos(prev => {
+        const newPhotos = [photo, ...prev];
+        addLog(`📷 写真を保存しました (ID: ${photo.id})`);
+        addLog(`📂 写真リスト更新: ${newPhotos.length}枚`);
+        return newPhotos;
+      });
 
     } catch (error) {
       addLog(`❌ 写真撮影エラー: ${error}`);
@@ -735,9 +739,9 @@ const CameraSwitcher: React.FC = () => {
       />
 
       {/* 撮影済み写真一覧 */}
-      {capturedPhotos.length > 0 && (
-        <div style={{ marginBottom: '20px' }}>
-          <h4>📷 撮影済み写真 ({capturedPhotos.length}枚)</h4>
+      <div style={{ marginBottom: '20px' }}>
+        <h4>📷 撮影済み写真 ({capturedPhotos.length}枚)</h4>
+        {capturedPhotos.length > 0 ? (
           <div style={{
             display: 'grid',
             gridTemplateColumns: 'repeat(auto-fill, minmax(200px, 1fr))',
@@ -867,8 +871,20 @@ const CameraSwitcher: React.FC = () => {
               </div>
             ))}
           </div>
-        </div>
-      )}
+        ) : (
+          <div style={{
+            padding: '20px',
+            textAlign: 'center',
+            border: '2px dashed #dee2e6',
+            borderRadius: '8px',
+            backgroundColor: '#f8f9fa',
+            color: '#6c757d'
+          }}>
+            📷 まだ写真がありません<br/>
+            シャッターボタンで撮影してください
+          </div>
+        )}
+      </div>
 
       {/* クイック切り替えボタン */}
       {devices.length > 0 && (
