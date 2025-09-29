@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import axios from 'axios';
+import api from '../api/config';
 import './ParkingRecords.css';
 
 interface ParkingRecord {
@@ -37,7 +37,7 @@ const ParkingRecords: React.FC = () => {
         status: filterStatus
       });
       
-      const response = await axios.get(`/api/parking-records?${params}`);
+      const response = await api.get(`/api/parking-records?${params}`);
       setRecords(response.data);
     } catch (error) {
       console.error('記録の取得に失敗しました:', error);
@@ -54,7 +54,7 @@ const ParkingRecords: React.FC = () => {
         status: filterStatus
       });
 
-      const response = await axios.get(`/api/export-excel?${params}`, {
+      const response = await api.get(`/api/export-excel?${params}`, {
         responseType: 'blob'
       });
 

@@ -16,6 +16,9 @@ app.use(express.json({ limit: '50mb' }));
 app.use(express.urlencoded({ extended: true, limit: '50mb' }));
 app.use('/uploads', express.static('uploads'));
 
+// Reactアプリのstatic filesを提供
+app.use(express.static(path.join(__dirname, 'client/build')));
+
 // アップロードディレクトリの作成
 const uploadsDir = 'uploads';
 if (!fs.existsSync(uploadsDir)) {
@@ -341,6 +344,11 @@ app.get('/api/export-excel', async (req, res) => {
   } catch (error) {
     res.status(500).json({ error: error.message });
   }
+});
+
+// React Router対応 - SPAのfallback
+app.get('*', (req, res) => {
+  res.sendFile(path.join(__dirname, 'client/build', 'index.html'));
 });
 
 // サーバー起動

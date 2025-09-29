@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import axios from 'axios';
+import api from '../api/config';
 import './ParkingDashboard.css';
 
 interface ParkingSpot {
@@ -24,7 +24,7 @@ const ParkingDashboard: React.FC = () => {
 
   const fetchParkingSpots = async () => {
     try {
-      const response = await axios.get('/api/parking-spots');
+      const response = await api.get('/api/parking-spots');
       setParkingSpots(response.data);
       setLoading(false);
     } catch (error) {
@@ -40,7 +40,7 @@ const ParkingDashboard: React.FC = () => {
 
   const handleCheckOut = async (recordId: number, spotNumber: number) => {
     try {
-      await axios.put(`/api/parking-records/${recordId}/checkout`);
+      await api.put(`/api/parking-records/${recordId}/checkout`);
       setShowModal(false);
       fetchParkingSpots(); // データを再取得
     } catch (error) {

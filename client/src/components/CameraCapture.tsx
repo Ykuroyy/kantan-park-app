@@ -1,6 +1,6 @@
 import React, { useState, useRef, useCallback, useEffect } from 'react';
 import Tesseract from 'tesseract.js';
-import axios from 'axios';
+import api from '../api/config';
 import './CameraCapture.css';
 
 interface CameraProps {
@@ -212,7 +212,7 @@ const CameraCapture: React.FC<CameraProps> = ({ onCapture }) => {
         formData.append('image', blob, 'license_plate.jpg');
       }
 
-      await axios.post('/api/parking-records', formData, {
+      await api.post('/api/parking-records', formData, {
         headers: { 'Content-Type': 'multipart/form-data' }
       });
 
