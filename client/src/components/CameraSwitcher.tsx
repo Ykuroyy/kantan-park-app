@@ -176,9 +176,15 @@ const CameraSwitcher: React.FC = () => {
   const initOCRWorker = async () => {
     try {
       addLog('🔤 OCRワーカーを初期化中...');
-      const worker = await createWorker('jpn');
+      const worker = await createWorker('jpn+eng');
+      
+      // ナンバープレート認識に最適化
+      await worker.setParameters({
+        tessedit_char_whitelist: '0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZあいうえおかきくけこさしすせそたちつてとなにぬねのはひふへほまみむめもやゆよらりるれろわをん'
+      });
+      
       setOcrWorker(worker);
-      addLog('✅ OCRワーカー初期化完了');
+      addLog('✅ OCRワーカー初期化完了（ナンバープレート最適化）');
     } catch (error) {
       addLog(`❌ OCRワーカー初期化エラー: ${error}`);
     }
@@ -316,6 +322,32 @@ const CameraSwitcher: React.FC = () => {
   return (
     <div style={{ padding: '20px', maxWidth: '800px', margin: '0 auto' }}>
       <h2>📷 カメラ切り替え（背面カメラ対応）</h2>
+      
+      {/* 使用方法説明 */}
+      <div style={{
+        backgroundColor: '#e7f3ff',
+        border: '1px solid #007bff',
+        borderRadius: '8px',
+        padding: '15px',
+        marginBottom: '20px'
+      }}>
+        <h4 style={{ margin: '0 0 10px 0', color: '#007bff' }}>📋 使用方法</h4>
+        <ol style={{ margin: 0, paddingLeft: '20px' }}>
+          <li><strong>カメラ起動</strong>: 背面トリプルカメラが自動選択されます</li>
+          <li><strong>撮影</strong>: 赤い📸シャッターボタンをタップして撮影</li>
+          <li><strong>OCR確認</strong>: ナンバープレートのテキストが自動読み取りされます</li>
+          <li><strong>駐車場所選択</strong>: 写真下の「駐車場所選択」で1-100を選択</li>
+          <li><strong>自動保存</strong>: 場所選択と同時にサーバーに保存されます</li>
+        </ol>
+        <div style={{
+          marginTop: '10px',
+          fontSize: '12px',
+          color: '#666',
+          fontStyle: 'italic'
+        }}>
+          💡 ナンバープレートの例: 「品川 500 あ 12-34」「横浜 301 さ 56-78」
+        </div>
+      </div>
       
       {/* カメラ選択 */}
       <div style={{ marginBottom: '20px', padding: '15px', backgroundColor: '#f8f9fa', borderRadius: '8px' }}>
@@ -547,7 +579,21 @@ const CameraSwitcher: React.FC = () => {
                   <div><strong>撮影時刻:</strong> {photo.timestamp}</div>
                   <div><strong>カメラ:</strong> {photo.cameraLabel}</div>
                   {photo.ocrText && (
-                    <div><strong>OCR結果:</strong> {photo.ocrText.substring(0, 30)}...</div>
+                    <div style={{ marginTop: '5px' }}>
+                      <strong>OCR結果:</strong>
+                      <div style={{
+                        backgroundColor: '#e9ecef',
+                        padding: '5px',
+                        borderRadius: '3px',
+                        fontSize: '11px',
+                        marginTop: '2px',
+                        wordBreak: 'break-all',
+                        maxHeight: '60px',
+                        overflowY: 'auto'
+                      }}>
+                        {photo.ocrText}
+                      </div>
+                    </div>
                   )}
                 </div>
                 <div style={{ marginTop: '10px', display: 'flex', gap: '5px' }}>
