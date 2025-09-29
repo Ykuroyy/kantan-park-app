@@ -119,9 +119,7 @@ const CameraCapture: React.FC<CameraProps> = ({ onCapture }) => {
         preprocessedImage,
         'eng',
         {
-          logger: m => console.log(m),
-          tessedit_char_whitelist: 'ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789-', // ナンバープレート文字のみ
-          tessedit_pageseg_mode: Tesseract.PSM.SINGLE_BLOCK
+          logger: m => console.log(m)
         }
       );
 
