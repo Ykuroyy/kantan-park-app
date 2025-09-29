@@ -13,6 +13,21 @@ interface CapturedPhoto {
   imageData: string;
   ocrText?: string;
   cameraLabel: string;
+  location?: {
+    latitude: number;
+    longitude: number;
+    accuracy: number;
+  };
+  suggestedSpot?: number;
+  autoDetected?: boolean;
+}
+
+interface ParkingSpot {
+  id: number;
+  latitude: number;
+  longitude: number;
+  name: string;
+  isOccupied?: boolean;
 }
 
 const CameraSwitcher: React.FC = () => {
@@ -24,15 +39,119 @@ const CameraSwitcher: React.FC = () => {
   const [capturedPhotos, setCapturedPhotos] = useState<CapturedPhoto[]>([]);
   const [isProcessing, setIsProcessing] = useState(false);
   const [ocrWorker, setOcrWorker] = useState<any>(null);
+  const [locationPermission, setLocationPermission] = useState<PermissionState | null>(null);
+  const [currentLocation, setCurrentLocation] = useState<GeolocationPosition | null>(null);
   
   const videoRef = useRef<HTMLVideoElement>(null);
   const canvasRef = useRef<HTMLCanvasElement>(null);
+
+  // サンプル駐車スポット位置データ（実際のホテルでは正確な座標を設定）
+  const parkingSpots: ParkingSpot[] = Array.from({length: 100}, (_, i) => ({
+    id: i + 1,
+    // デモ用：東京駅周辺の座標に小さなオフセットを付けて100個のスポットを生成
+    latitude: 35.6812 + (Math.floor(i / 10) * 0.0001) + ((i % 10) * 0.0001),
+    longitude: 139.7671 + (Math.floor(i / 10) * 0.0001) + ((i % 10) * 0.0001),
+    name: `駐車スポット ${i + 1}`,
+    isOccupied: false
+  }));
 
   const addLog = (message: string) => {
     const timestamp = new Date().toLocaleTimeString();
     const logMessage = `[${timestamp}] ${message}`;
     console.log(logMessage);
     setLogs(prev => [...prev, logMessage]);
+  };
+
+  // 2点間の距離を計算（ハーバーサイン公式）
+  const calculateDistance = (lat1: number, lon1: number, lat2: number, lon2: number): number => {
+    const R = 6371e3; // 地球の半径（メートル）
+    const φ1 = lat1 * Math.PI / 180;
+    const φ2 = lat2 * Math.PI / 180;
+    const Δφ = (lat2 - lat1) * Math.PI / 180;
+    const Δλ = (lon2 - lon1) * Math.PI / 180;
+
+    const a = Math.sin(Δφ/2) * Math.sin(Δφ/2) +
+              Math.cos(φ1) * Math.cos(φ2) *
+              Math.sin(Δλ/2) * Math.sin(Δλ/2);
+    const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1-a));
+
+    return R * c; // 距離（メートル）
+  };
+
+  // 最寄りの駐車スポットを検索
+  const findNearestParkingSpot = (latitude: number, longitude: number): ParkingSpot | null => {
+    let nearestSpot: ParkingSpot | null = null;
+    let minDistance = Infinity;
+
+    for (const spot of parkingSpots) {
+      const distance = calculateDistance(latitude, longitude, spot.latitude, spot.longitude);
+      if (distance < minDistance) {
+        minDistance = distance;
+        nearestSpot = spot;
+      }
+    }
+
+    addLog(`📍 最寄り駐車スポット: ${nearestSpot?.name} (距離: ${Math.round(minDistance)}m)`);
+    return nearestSpot;
+  };
+
+  // 位置情報取得
+  const getCurrentLocation = (): Promise<GeolocationPosition> => {
+    return new Promise((resolve, reject) => {
+      if (!navigator.geolocation) {
+        reject(new Error('位置情報がサポートされていません'));
+        return;
+      }
+
+      addLog('📍 位置情報を取得中...');
+      
+      navigator.geolocation.getCurrentPosition(
+        (position) => {
+          addLog(`✅ 位置情報取得成功: ${position.coords.latitude.toFixed(6)}, ${position.coords.longitude.toFixed(6)} (精度: ${Math.round(position.coords.accuracy)}m)`);
+          setCurrentLocation(position);
+          resolve(position);
+        },
+        (error) => {
+          let errorMessage = '位置情報取得エラー: ';
+          switch (error.code) {
+            case error.PERMISSION_DENIED:
+              errorMessage += '位置情報の使用が拒否されました';
+              break;
+            case error.POSITION_UNAVAILABLE:
+              errorMessage += '位置情報を取得できません';
+              break;
+            case error.TIMEOUT:
+              errorMessage += '位置情報取得がタイムアウトしました';
+              break;
+            default:
+              errorMessage += '不明なエラーが発生しました';
+              break;
+          }
+          addLog(`❌ ${errorMessage}`);
+          reject(error);
+        },
+        {
+          enableHighAccuracy: true,
+          timeout: 10000,
+          maximumAge: 60000
+        }
+      );
+    });
+  };
+
+  // 位置情報権限確認
+  const checkLocationPermission = async () => {
+    try {
+      const permission = await navigator.permissions.query({ name: 'geolocation' });
+      setLocationPermission(permission.state);
+      addLog(`📍 位置情報権限: ${permission.state}`);
+      
+      if (permission.state === 'granted') {
+        await getCurrentLocation();
+      }
+    } catch (error) {
+      addLog(`❌ 位置情報権限確認エラー: ${error}`);
+    }
   };
 
   // カメラデバイス一覧を取得
@@ -234,6 +353,25 @@ const CameraSwitcher: React.FC = () => {
 
       addLog(`✅ 写真撮影完了 (${videoWidth}x${videoHeight})`);
 
+      // 位置情報を取得して最寄りスポットを自動判定
+      try {
+        const position = await getCurrentLocation();
+        const { latitude, longitude, accuracy } = position.coords;
+        
+        photo.location = { latitude, longitude, accuracy };
+        
+        // 最寄りの駐車スポットを検索
+        const nearestSpot = findNearestParkingSpot(latitude, longitude);
+        if (nearestSpot) {
+          photo.suggestedSpot = nearestSpot.id;
+          photo.autoDetected = true;
+          addLog(`🎯 自動検出: 駐車スポット${nearestSpot.id}を提案`);
+        }
+      } catch (locationError) {
+        addLog(`⚠️ 位置情報取得失敗: 手動選択が必要です`);
+        photo.autoDetected = false;
+      }
+
       // OCR処理
       if (ocrWorker) {
         addLog('🔤 OCR処理開始...');
@@ -302,6 +440,7 @@ const CameraSwitcher: React.FC = () => {
   useEffect(() => {
     getDevices();
     initOCRWorker();
+    checkLocationPermission();
   }, []);
 
   // カメラ推奨度を計算（背面カメラを優先）
@@ -334,9 +473,11 @@ const CameraSwitcher: React.FC = () => {
         <h4 style={{ margin: '0 0 10px 0', color: '#007bff' }}>📋 使用方法</h4>
         <ol style={{ margin: 0, paddingLeft: '20px' }}>
           <li><strong>カメラ起動</strong>: 背面トリプルカメラが自動選択されます</li>
+          <li><strong>位置情報許可</strong>: 位置情報へのアクセスを許可してください</li>
           <li><strong>撮影</strong>: 赤い📸シャッターボタンをタップして撮影</li>
+          <li><strong>自動位置検出</strong>: GPSで最寄りの駐車スポットを自動判定</li>
           <li><strong>OCR確認</strong>: ナンバープレートのテキストが自動読み取りされます</li>
-          <li><strong>駐車場所選択</strong>: 写真下の「駐車場所選択」で1-100を選択</li>
+          <li><strong>駐車場所確認</strong>: 自動選択されたスポットを確認（手動変更も可能）</li>
           <li><strong>自動保存</strong>: 場所選択と同時にサーバーに保存されます</li>
         </ol>
         <div style={{
@@ -346,6 +487,58 @@ const CameraSwitcher: React.FC = () => {
           fontStyle: 'italic'
         }}>
           💡 ナンバープレートの例: 「品川 500 あ 12-34」「横浜 301 さ 56-78」
+        </div>
+      </div>
+
+      {/* 位置情報状況 */}
+      <div style={{
+        marginBottom: '20px',
+        padding: '15px',
+        backgroundColor: locationPermission === 'granted' ? '#d4edda' : '#fff3cd',
+        border: `1px solid ${locationPermission === 'granted' ? '#c3e6cb' : '#ffeaa7'}`,
+        borderRadius: '8px'
+      }}>
+        <h4 style={{ 
+          margin: '0 0 10px 0', 
+          color: locationPermission === 'granted' ? '#155724' : '#856404' 
+        }}>
+          📍 位置情報ステータス
+        </h4>
+        <div style={{ fontSize: '14px' }}>
+          <div>
+            <strong>権限:</strong> 
+            <span style={{ marginLeft: '5px' }}>
+              {locationPermission === 'granted' ? '✅ 許可済み' : 
+               locationPermission === 'denied' ? '❌ 拒否' :
+               locationPermission === 'prompt' ? '⏳ 確認待ち' : '🔍 確認中'}
+            </span>
+          </div>
+          {currentLocation && (
+            <div style={{ marginTop: '5px' }}>
+              <strong>現在位置:</strong> {currentLocation.coords.latitude.toFixed(6)}, {currentLocation.coords.longitude.toFixed(6)}
+              <div style={{ fontSize: '12px', color: '#666', marginTop: '2px' }}>
+                精度: ±{Math.round(currentLocation.coords.accuracy)}m | 取得時刻: {new Date(currentLocation.timestamp).toLocaleTimeString()}
+              </div>
+            </div>
+          )}
+          {locationPermission !== 'granted' && (
+            <div style={{ marginTop: '8px' }}>
+              <button
+                onClick={checkLocationPermission}
+                style={{
+                  padding: '6px 12px',
+                  backgroundColor: '#007bff',
+                  color: 'white',
+                  border: 'none',
+                  borderRadius: '4px',
+                  cursor: 'pointer',
+                  fontSize: '12px'
+                }}
+              >
+                📍 位置情報を許可する
+              </button>
+            </div>
+          )}
         </div>
       </div>
       
@@ -579,6 +772,32 @@ const CameraSwitcher: React.FC = () => {
                 <div style={{ fontSize: '12px', color: '#666' }}>
                   <div><strong>撮影時刻:</strong> {photo.timestamp}</div>
                   <div><strong>カメラ:</strong> {photo.cameraLabel}</div>
+                  
+                  {/* 位置情報表示 */}
+                  {photo.location && (
+                    <div style={{ marginTop: '3px' }}>
+                      <strong>📍 位置:</strong> {photo.location.latitude.toFixed(6)}, {photo.location.longitude.toFixed(6)}
+                      <div style={{ fontSize: '11px', color: '#999' }}>
+                        精度: ±{Math.round(photo.location.accuracy)}m
+                      </div>
+                    </div>
+                  )}
+                  
+                  {/* 自動検出結果 */}
+                  {photo.suggestedSpot && (
+                    <div style={{
+                      marginTop: '5px',
+                      padding: '4px 8px',
+                      backgroundColor: photo.autoDetected ? '#d4edda' : '#fff3cd',
+                      borderRadius: '4px',
+                      border: `1px solid ${photo.autoDetected ? '#c3e6cb' : '#ffeaa7'}`
+                    }}>
+                      <strong style={{ color: photo.autoDetected ? '#155724' : '#856404' }}>
+                        🎯 {photo.autoDetected ? '自動検出' : '推奨'}: スポット{photo.suggestedSpot}
+                      </strong>
+                    </div>
+                  )}
+                  
                   {photo.ocrText && (
                     <div style={{ marginTop: '5px' }}>
                       <strong>OCR結果:</strong>
@@ -599,6 +818,7 @@ const CameraSwitcher: React.FC = () => {
                 </div>
                 <div style={{ marginTop: '10px', display: 'flex', gap: '5px' }}>
                   <select
+                    defaultValue={photo.suggestedSpot || ''}
                     onChange={(e) => {
                       const spotNumber = parseInt(e.target.value);
                       if (spotNumber) {
@@ -610,12 +830,23 @@ const CameraSwitcher: React.FC = () => {
                       padding: '4px',
                       fontSize: '12px',
                       borderRadius: '4px',
-                      border: '1px solid #dee2e6'
+                      border: photo.suggestedSpot ? '2px solid #28a745' : '1px solid #dee2e6',
+                      backgroundColor: photo.suggestedSpot ? '#f8fff9' : 'white'
                     }}
                   >
-                    <option value="">駐車場所選択</option>
+                    <option value="">{photo.suggestedSpot ? '自動選択を確認' : '駐車場所選択'}</option>
                     {Array.from({length: 100}, (_, i) => i + 1).map(num => (
-                      <option key={num} value={num}>スポット {num}</option>
+                      <option 
+                        key={num} 
+                        value={num}
+                        style={{
+                          fontWeight: num === photo.suggestedSpot ? 'bold' : 'normal',
+                          backgroundColor: num === photo.suggestedSpot ? '#e8f5e8' : 'white'
+                        }}
+                      >
+                        {num === photo.suggestedSpot ? '🎯 ' : ''}スポット {num}
+                        {num === photo.suggestedSpot ? ' (推奨)' : ''}
+                      </option>
                     ))}
                   </select>
                   <button
